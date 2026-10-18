@@ -1,64 +1,112 @@
 import streamlit as st
-import pandas as pd
 import requests as rq
 import bs4
-import plotly.express as px
+import pandas as pd
 from io import StringIO
+import plotly.graph_objects as go
 
-st.title("GDP by Country and Region")
+st.set_page_config(layout="wide")
+st.title("Global GDP by Country and Region")
 
-# Reading in the data from Wikipedia page
-url = 'https://en.wikipedia.org/wiki/List_of_countries_by_GDP_(nominal)'
-page = rq.get(url, headers={"User-Agent": "MyProject/1.0 (nanssoma22@gmail.com)"})
+# Fetch the Wikipedia page containing GDP data
+url = "https://en.wikipedia.org/w/index.php?title=List_of_countries_by_GDP_(nominal)&oldid=1187446467"
+page = rq.get(url, headers={"User-Agent": "Chrome"})
+bs4page = bs4.BeautifulSoup(page.text, "html.parser")
 
-# Reading into BS4
-bs4page = bs4.BeautifulSoup(page.text, 'html.parser')
-tables = bs4page.find_all('table', {'class': "wikitable"})
+# Find all tables on the page
+tables = bs4page.find_all("table")
 
-# Reading into pandas
-wiki_tables = pd.read_html(StringIO(str(tables)))
+# Find the GDP table using its caption
+gdp_table = None
+for table in tables:
+    caption = table.find("caption")
+    if caption is not None and "GDP (USD million) by country" in caption.get_text():
+        gdp_table = table
+        break
 
-countries = wiki_tables[0]
-regions = wiki_tables[1]
+if gdp_table is None:
+    st.error("GDP table not found.")
+else:
+    # Convert the BeautifulSoup table to a pandas DataFrame
+    gdp = pd.read_html(StringIO(str(gdp_table)))[0]
 
-# Rename columns
-regions = regions.rename(columns={
-    'Regional groupings': 'regions',
-    'IMF (2026)[1]': 'imf',
-    'World Bank (2024)[6]': 'wb',
-    'United Nations (2023)[12]': 'un'
-})
+    # Clean table - rename columns to meaningful names
+    gdp.columns = [
+        "country", "region", "imf_gdp", "imf_year", 
+        "world_bank_gdp", "world_bank_year", "un_gdp", "un_year"
+    ]
 
-# Clean cells - remove brackets
-regions['regions'] = regions['regions'].str.replace(r'\[.*?\]', '', regex=True)
+    # Clean text fields by stripping whitespace
+    gdp["country"] = gdp["country"].astype(str).str.strip()
+    gdp["region"] = gdp["region"].astype(str).str.strip()
 
-# Let user select data source
-source = st.selectbox("Select GDP Source:", ["IMF", "World Bank", "United Nations"])
+    # Identify all columns ending in "_gdp" and convert to numeric values
+    gdp_columns = [col for col in gdp.columns if col.endswith("_gdp")]
 
-# Map selection to column name
-source_map = {
-    "IMF": "imf",
-    "World Bank": "wb",
-    "United Nations": "un"
-}
+    for col in gdp_columns:
+        gdp[col] = (
+            gdp[col]
+            .astype(str)
+            .str.replace(",", "", regex=False)
+            .str.replace("-NA", "", regex=False)
+            .str.replace("—", "", regex=False)
+            .str.strip()
+        )
+        gdp[col] = pd.to_numeric(gdp[col], errors="coerce")
 
-selected_column = source_map[source]
+    # Sidebar for user selection of data source
+    st.sidebar.header("Select Data Source")
+    source = st.sidebar.radio(
+        "Choose GDP Data Source:",
+        ("IMF", "World Bank", "UN")
+    )
 
-# Create bar chart
-fig = px.bar(
-    regions,
-    x='regions',
-    y=selected_column,
-    title=f'GDP by Region ({source})',
-    color='regions'
-)
+    # Filter out world total row for regional analysis
+    gdp_region = gdp[gdp["country"] != "World"].copy()
 
-fig.update_layout(
-    xaxis_title='Region',
-    yaxis_title='Million USD ($)',
-    width=800,
-    height=500
-)
+    # Map selection to column name and create plot
+    if source == "IMF":
+        gdp_region = gdp_region.dropna(subset=["imf_gdp"])
+        gdp_col = "imf_gdp"
+        title = "IMF GDP (nominal) by Region"
+    elif source == "World Bank":
+        gdp_region = gdp_region.dropna(subset=["world_bank_gdp"])
+        gdp_col = "world_bank_gdp"
+        title = "World Bank GDP (nominal) by Region"
+    else:
+        gdp_region = gdp_region.dropna(subset=["un_gdp"])
+        gdp_col = "un_gdp"
+        title = "UN GDP (nominal) by Region"
 
-# Display chart
-st.plotly_chart(fig)
+    # Create stacked bar plot for selected data source
+    fig = go.Figure()
+
+    # Add bars for each country, stacked within regions
+    for country in gdp_region["country"].unique():
+        country_data = gdp_region[gdp_region["country"] == country]
+        fig.add_trace(go.Bar(
+            x=country_data["region"],
+            y=country_data[gdp_col],
+            name=country,
+            hovertemplate="<b>%{fullData.name}</b><br>Region: %{x}<br>GDP: $%{y:,.0f}M<extra></extra>"
+        ))
+
+    # Update layout for stacked bar plot
+    fig.update_layout(
+        barmode="stack",
+        title=title,
+        xaxis_title="Region",
+        yaxis_title="Million USD ($)",
+        hovermode="x unified",
+        height=600,
+        width=1200,
+        showlegend=True
+    )
+
+    # Display plot
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Display data table
+    st.subheader("Data Table")
+    display_columns = ["country", "region", gdp_col]
+    st.dataframe(gdp[display_columns].dropna(subset=[gdp_col]))
