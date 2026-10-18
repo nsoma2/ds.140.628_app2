@@ -67,15 +67,12 @@ else:
     # Map selection to column name and year column
     if source == "IMF":
         gdp_col = "imf_gdp"
-        year_col = "imf_year"
         title = "IMF GDP (nominal) by Region"
     elif source == "World Bank":
         gdp_col = "world_bank_gdp"
-        year_col = "world_bank_year"
         title = "World Bank GDP (nominal) by Region"
     else:  # UN
         gdp_col = "un_gdp"
-        year_col = "un_year"
         title = "UN GDP (nominal) by Region"
 
     # Remove rows with missing GDP values for selected source
@@ -91,7 +88,6 @@ else:
         hover_data={
             "region": False,
             gdp_col: ":,.0f",
-            year_col: True
         },
         title=title
     )
@@ -112,6 +108,3 @@ else:
     st.subheader("Data Table")
     display_columns = ["country", "region", gdp_col, year_col]
     st.dataframe(gdp_region[display_columns])
-
-    # Write/update html
-    fig.write_html("stacked_bar.html")
