@@ -3,17 +3,18 @@ import requests as rq
 import bs4
 import pandas as pd
 from io import StringIO
-import plotly.graph_objects as go
+import plotly.express as px
+import numpy as np
 
 st.set_page_config(layout="wide")
 st.title("Global GDP by Country and Region")
 
-# Fetch the Wikipedia page containing GDP data
+# Fetch the Wikipedia page
 url = "https://en.wikipedia.org/w/index.php?title=List_of_countries_by_GDP_(nominal)&oldid=1187446467"
 page = rq.get(url, headers={"User-Agent": "Chrome"})
 bs4page = bs4.BeautifulSoup(page.text, "html.parser")
 
-# Find all tables on the page
+# Find all tables
 tables = bs4page.find_all("table")
 
 # Find the GDP table using its caption
@@ -30,17 +31,16 @@ else:
     # Convert the BeautifulSoup table to a pandas DataFrame
     gdp = pd.read_html(StringIO(str(gdp_table)))[0]
 
-    # Clean table - rename columns to meaningful names
+    # Clean table
     gdp.columns = [
-        "country", "region", "imf_gdp", "imf_year", 
-        "world_bank_gdp", "world_bank_year", "un_gdp", "un_year"
+        "country", "region", "imf_gdp", "imf_year", "world_bank_gdp", "world_bank_year", "un_gdp", "un_year"
     ]
 
-    # Clean text fields by stripping whitespace
+    # Clean text fields
     gdp["country"] = gdp["country"].astype(str).str.strip()
     gdp["region"] = gdp["region"].astype(str).str.strip()
 
-    # Identify all columns ending in "_gdp" and convert to numeric values
+    # Identify all columns ending in "_gdp" and convert columns to numeric values
     gdp_columns = [col for col in gdp.columns if col.endswith("_gdp")]
 
     for col in gdp_columns:
@@ -61,52 +61,57 @@ else:
         ("IMF", "World Bank", "UN")
     )
 
-    # Filter out world total row for regional analysis
+    # Filter out world total
     gdp_region = gdp[gdp["country"] != "World"].copy()
 
-    # Map selection to column name and create plot
+    # Map selection to column name and year column
     if source == "IMF":
-        gdp_region = gdp_region.dropna(subset=["imf_gdp"])
         gdp_col = "imf_gdp"
+        year_col = "imf_year"
         title = "IMF GDP (nominal) by Region"
     elif source == "World Bank":
-        gdp_region = gdp_region.dropna(subset=["world_bank_gdp"])
         gdp_col = "world_bank_gdp"
+        year_col = "world_bank_year"
         title = "World Bank GDP (nominal) by Region"
-    else:
-        gdp_region = gdp_region.dropna(subset=["un_gdp"])
+    else:  # UN
         gdp_col = "un_gdp"
+        year_col = "un_year"
         title = "UN GDP (nominal) by Region"
 
-    # Create stacked bar plot for selected data source
-    fig = go.Figure()
+    # Remove rows with missing GDP values for selected source
+    gdp_region = gdp_region.dropna(subset=[gdp_col])
 
-    # Add bars for each country, stacked within regions
-    for country in gdp_region["country"].unique():
-        country_data = gdp_region[gdp_region["country"] == country]
-        fig.add_trace(go.Bar(
-            x=country_data["region"],
-            y=country_data[gdp_col],
-            name=country,
-            hovertemplate="<b>%{fullData.name}</b><br>Region: %{x}<br>GDP: $%{y:,.0f}M<extra></extra>"
-        ))
-
-    # Update layout for stacked bar plot
-    fig.update_layout(
-        barmode="stack",
-        title=title,
-        xaxis_title="Region",
-        yaxis_title="Million USD ($)",
-        hovermode="x unified",
-        height=600,
-        width=1200,
-        showlegend=True
+    # Create stacked bar plot
+    fig = px.bar(
+        gdp_region,
+        x="region",
+        y=gdp_col,
+        color="country",
+        hover_name="country",
+        hover_data={
+            "region": False,
+            gdp_col: ":,.0f",
+            year_col: True
+        },
+        title=title
     )
 
-    # Display plot
+    fig.update_layout(
+        barmode="stack",
+        showlegend=False,
+        xaxis_title="Region",
+        yaxis_title="Million USD ($)"
+    )
+
+    fig.update_traces(showlegend=False)
+
+    # Display plot in Streamlit
     st.plotly_chart(fig, use_container_width=True)
 
     # Display data table
     st.subheader("Data Table")
-    display_columns = ["country", "region", gdp_col]
-    st.dataframe(gdp[display_columns].dropna(subset=[gdp_col]))
+    display_columns = ["country", "region", gdp_col, year_col]
+    st.dataframe(gdp_region[display_columns])
+
+    # Write/update html
+    fig.write_html("stacked_bar.html")
