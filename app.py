@@ -97,12 +97,11 @@ else:
         xaxis_title="Region",
         yaxis_title="Million USD ($)"
     )
-
+    
     fig.update_traces(
     hovertemplate="<b>%{fullData.name}</b><br>GDP: $%{y:,.0f}M<extra></extra>",
-    showlegend = False
-)
-
+    showlegend=False
+    )
 
     # Display plot in Streamlit
     st.plotly_chart(fig, use_container_width=True)
