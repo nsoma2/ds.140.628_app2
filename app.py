@@ -54,9 +54,8 @@ else:
         )
         gdp[col] = pd.to_numeric(gdp[col], errors="coerce")
 
-    # Sidebar for user selection of data source
-    st.sidebar.header("Select Data Source")
-    source = st.sidebar.radio(
+    # Dropdown menu of selection of data source
+    source = st.selectbox(
         "Choose GDP Data Source:",
         ("IMF", "World Bank", "UN")
     )
@@ -99,12 +98,11 @@ else:
         yaxis_title="Million USD ($)"
     )
 
-    fig.update_traces(showlegend=False)
+    fig.update_traces(
+    hovertemplate="<b>%{fullData.name}</b><br>GDP: $%{y:,.0f}M<extra></extra>",
+    showlegend = False
+)
+
 
     # Display plot in Streamlit
     st.plotly_chart(fig, use_container_width=True)
-
-    # Display data table
-    st.subheader("Data Table")
-    display_columns = ["country", "region", gdp_col]
-    st.dataframe(gdp_region[display_columns])
