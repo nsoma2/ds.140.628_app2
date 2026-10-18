@@ -1,6 +1,7 @@
 streamlit
-pandas
 requests
 bs4
-plotly.express
+pandas
 io
+plotly
+numpy
