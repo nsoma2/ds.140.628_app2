@@ -106,5 +106,5 @@ else:
 
     # Display data table
     st.subheader("Data Table")
-    display_columns = ["country", "region", gdp_col, year_col]
+    display_columns = ["country", "region", gdp_col]
     st.dataframe(gdp_region[display_columns])
